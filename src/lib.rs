@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use itertools_num::linspace;
+
 use lazy_static::lazy_static;
+
+use num_traits::Float;
 
 use std::cmp::min;
 use std::f32::consts::PI;
@@ -41,10 +45,7 @@ impl Default for FaderEffect {
 }
 
 impl FaderEffect {
-	fn process_internal<F: num_traits::Float + std::convert::From<f32>>(
-		&mut self,
-		buffer: &mut AudioBuffer<F>,
-	) {
+	fn process_internal<F: Float + From<f32>>(&mut self, buffer: &mut AudioBuffer<F>) {
 		let parameters = self.parameters.storage.read().unwrap();
 		let target_volume = parameters.volume;
 		let target_pan = parameters.pan;
@@ -292,12 +293,12 @@ lazy_static! {
 		let mut lut = [[[0.0f32; 202]; 3]; 2];
 		for (taper, taper_lut) in PAN_TAPERS.iter().zip(lut.iter_mut()) {
 			for (law, law_lut) in PAN_LAWS.iter().copied().zip(taper_lut.iter_mut()) {
-				#[allow(clippy::needless_range_loop)]
-				for index in 0..201 {
-					let pan_amount = index as f32 / 200.0;
-					law_lut[index] = taper(pan_amount, law);
+				for (pan_amount, value) in
+					linspace::<f32>(0.0, 1.0, law_lut.len() - 1).zip(law_lut.iter_mut())
+				{
+					*value = taper(pan_amount, law);
 				}
-				law_lut[201] = law_lut[200];
+				law_lut[law_lut.len() - 1] = law_lut[law_lut.len() - 2];
 			}
 		}
 		lut
@@ -311,7 +312,7 @@ fn lookup_interpolated(lut: &[f32], pos: f32) -> f32 {
 	(1.0 - t) * lut[index] + t * lut[index + 1]
 }
 
-fn non_finite_to_zero<F: num_traits::Float>(value: F) -> F {
+fn non_finite_to_zero<F: Float>(value: F) -> F {
 	if value.is_finite() {
 		value
 	} else {
