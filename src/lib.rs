@@ -15,12 +15,11 @@
 use lazy_static::lazy_static;
 
 use std::f32::consts::PI;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use vst::buffer::AudioBuffer;
 use vst::plugin::{Category, Info, Plugin, PluginParameters};
 use vst::plugin_main;
-use vst::util::AtomicFloat;
 
 struct FaderEffect {
 	parameters: Arc<FaderEffectParameters>,
@@ -43,11 +42,11 @@ impl FaderEffect {
 		&mut self,
 		buffer: &mut AudioBuffer<F>,
 	) {
-		let target_volume = self.parameters.volume.get();
-		let target_pan = self.parameters.pan.get();
-		let pan_taper =
-			&PAN_LUT[std::cmp::min((self.parameters.pan_taper.get() * 2.0) as usize, 1)];
-		let pan_law = &pan_taper[std::cmp::min((self.parameters.pan_law.get() * 3.0) as usize, 2)];
+		let parameters = self.parameters.storage.read().unwrap();
+		let target_volume = parameters.volume;
+		let target_pan = parameters.pan;
+		let pan_taper = &PAN_LUT[std::cmp::min((parameters.pan_taper * 2.0) as usize, 1)];
+		let pan_law = &pan_taper[std::cmp::min((parameters.pan_law * 3.0) as usize, 2)];
 		let volume_lut = &*VOLUME_LUT;
 
 		let mut volume = if self.current_volume < 0.0 {
@@ -139,53 +138,66 @@ impl Plugin for FaderEffect {
 
 plugin_main!(FaderEffect);
 
+#[derive(Clone, Copy)]
+struct FaderEffectParameterStorage {
+	volume: f32,
+	pan: f32,
+	pan_taper: f32,
+	pan_law: f32,
+}
+
 struct FaderEffectParameters {
-	volume: AtomicFloat,
-	pan: AtomicFloat,
-	pan_taper: AtomicFloat, // [0, 1/2) -> sine, [1/2, 1] -> root
-	pan_law: AtomicFloat,   // [0, 1/3) -> -3 dB, [1/3, 2/3) -> -4.5 dB, [2/3, 1] -> -6 dB
+	storage: RwLock<FaderEffectParameterStorage>,
 }
 
 impl Default for FaderEffectParameters {
 	fn default() -> FaderEffectParameters {
 		FaderEffectParameters {
-			volume: AtomicFloat::new(0.75),
-			pan: AtomicFloat::new(0.5),
-			pan_taper: AtomicFloat::new(0.0),
-			pan_law: AtomicFloat::new(0.5),
+			storage: RwLock::new(FaderEffectParameterStorage {
+				volume: 0.75,
+				pan: 0.5,
+				pan_taper: 0.0,
+				pan_law: 0.5,
+			}),
 		}
 	}
 }
 
 impl PluginParameters for FaderEffectParameters {
 	fn get_parameter(&self, index: i32) -> f32 {
+		let storage = self.storage.read().unwrap();
 		match index {
-			0 => self.volume.get(),
-			1 => self.pan.get(),
-			2 => self.pan_taper.get(),
-			3 => self.pan_law.get(),
-			_ => panic!("invalid parameter index!"),
+			0 => storage.volume,
+			1 => storage.pan,
+			2 => storage.pan_taper,
+			3 => storage.pan_law,
+			_ => {
+				// release lock before panicking!
+				drop(storage);
+				panic!("invalid parameter index!")
+			}
 		}
 	}
 
 	fn set_parameter(&self, index: i32, value: f32) {
+		let mut storage = self.storage.write().unwrap();
 		match index {
-			0 => self.volume.set(value),
-			1 => self.pan.set(value),
-			2 => self
-				.pan_taper
-				.set(((value * 2.0) as i32 as f32).max(0.0).min(1.0)),
-			3 => self
-				.pan_law
-				.set(((value * 3.0) as i32 as f32 / 2.0).max(0.0).min(1.0)),
-			_ => panic!("invalid parameter index!"),
+			0 => storage.volume = value,
+			1 => storage.pan = value,
+			2 => storage.pan_taper = ((value * 2.0) as i32 as f32).max(0.0).min(1.0),
+			3 => storage.pan_law = ((value * 3.0) as i32 as f32 / 2.0).max(0.0).min(1.0),
+			_ => {
+				// release lock before panicking!
+				drop(storage);
+				panic!("invalid parameter index!")
+			}
 		}
 	}
 
 	fn get_parameter_text(&self, index: i32) -> String {
 		match index {
 			0 => {
-				let volume = self.volume.get();
+				let volume = self.storage.read().unwrap().volume;
 				let gain = lookup_interpolated(&*VOLUME_LUT, volume);
 				if gain < 1e-5 {
 					"-inf dB".to_string()
@@ -194,7 +206,7 @@ impl PluginParameters for FaderEffectParameters {
 				}
 			}
 			1 => {
-				let pan = (200.0 * (self.pan.get() - 0.5)).round() as i32;
+				let pan = (200.0 * (self.storage.read().unwrap().pan - 0.5)).round() as i32;
 				format!(
 					"{} {}",
 					pan.abs(),
@@ -208,14 +220,14 @@ impl PluginParameters for FaderEffectParameters {
 				)
 			}
 			2 => {
-				let index = (self.pan_taper.get() * 2.0) as i32;
+				let index = (self.storage.read().unwrap().pan_taper * 2.0) as i32;
 				match index {
 					0 => "Sine".to_string(),
 					_ => "Root".to_string(),
 				}
 			}
 			3 => {
-				let index = (self.pan_law.get() * 3.0) as i32;
+				let index = (self.storage.read().unwrap().pan_law * 3.0) as i32;
 				match index {
 					0 => "3 dB".to_string(),
 					1 => "4.5 dB".to_string(),
