@@ -209,7 +209,7 @@ impl PluginParameters for FaderEffectParameters {
 				}
 			}
 			3 => {
-				let index = (self.pan_law.get() * 2.0) as i32;
+				let index = (self.pan_law.get() * 3.0) as i32;
 				match index {
 					0 => "3 dB".to_string(),
 					1 => "4.5 dB".to_string(),
