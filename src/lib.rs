@@ -188,10 +188,10 @@ impl PluginParameters for FaderEffectParameters {
 				}
 			}
 			1 => {
-				let pan = (100.0 * (self.pan.get() - 0.5)) as i32;
+				let pan = (200.0 * (self.pan.get() - 0.5)).round() as i32;
 				format!(
 					"{} {}",
-					pan,
+					pan.abs(),
 					if pan < 0 {
 						"L"
 					} else if pan > 0 {
