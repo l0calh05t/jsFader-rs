@@ -14,6 +14,7 @@
 
 use lazy_static::lazy_static;
 
+use std::cmp::min;
 use std::f32::consts::PI;
 use std::sync::{Arc, RwLock};
 
@@ -45,8 +46,7 @@ impl FaderEffect {
 		let parameters = self.parameters.storage.read().unwrap();
 		let target_volume = parameters.volume;
 		let target_pan = parameters.pan;
-		let pan_taper = &PAN_LUT[std::cmp::min((parameters.pan_taper * 2.0) as usize, 1)];
-		let pan_law = &pan_taper[std::cmp::min((parameters.pan_law * 3.0) as usize, 2)];
+		let pan_lut = &PAN_LUT[parameters.pan_taper as usize][parameters.pan_law as usize];
 		let volume_lut = &*VOLUME_LUT;
 
 		let mut volume = if self.current_volume < 0.0 {
@@ -67,7 +67,7 @@ impl FaderEffect {
 		let (inputs, outputs) = buffer.split();
 		let num_inputs = inputs.len();
 		let num_outputs = outputs.len();
-		let num_channels = std::cmp::min(num_inputs, num_outputs);
+		let num_channels = min(num_inputs, num_outputs);
 		let channel_pairs = num_channels / 2;
 
 		let volume_delta = (target_volume - volume) / num_samples as f32;
@@ -78,8 +78,8 @@ impl FaderEffect {
 			pan = (pan + pan_delta).max(0.0).min(1.0);
 
 			let volume_gain: F = lookup_interpolated(volume_lut, volume).into();
-			let gain_left = volume_gain * lookup_interpolated(pan_law, pan).into();
-			let gain_right = volume_gain * lookup_interpolated(pan_law, 1.0 - pan).into();
+			let gain_left = volume_gain * lookup_interpolated(pan_lut, pan).into();
+			let gain_right = volume_gain * lookup_interpolated(pan_lut, 1.0 - pan).into();
 
 			for channel_pair in 0..channel_pairs {
 				let left_index = 2 * channel_pair;
@@ -142,8 +142,8 @@ plugin_main!(FaderEffect);
 struct FaderEffectParameterStorage {
 	volume: f32,
 	pan: f32,
-	pan_taper: f32,
-	pan_law: f32,
+	pan_taper: u8,
+	pan_law: u8,
 }
 
 struct FaderEffectParameters {
@@ -156,8 +156,8 @@ impl Default for FaderEffectParameters {
 			storage: RwLock::new(FaderEffectParameterStorage {
 				volume: 0.75,
 				pan: 0.5,
-				pan_taper: 0.0,
-				pan_law: 0.5,
+				pan_taper: 0,
+				pan_law: 1,
 			}),
 		}
 	}
@@ -169,8 +169,8 @@ impl PluginParameters for FaderEffectParameters {
 		match index {
 			0 => storage.volume,
 			1 => storage.pan,
-			2 => storage.pan_taper,
-			3 => storage.pan_law,
+			2 => f32::from(storage.pan_taper),
+			3 => f32::from(storage.pan_law) / 2.0,
 			_ => {
 				// release lock before panicking!
 				drop(storage);
@@ -184,8 +184,8 @@ impl PluginParameters for FaderEffectParameters {
 		match index {
 			0 => storage.volume = value,
 			1 => storage.pan = value,
-			2 => storage.pan_taper = ((value * 2.0) as i32 as f32).max(0.0).min(1.0),
-			3 => storage.pan_law = ((value * 3.0) as i32 as f32 / 2.0).max(0.0).min(1.0),
+			2 => storage.pan_taper = min((value * 2.0) as u8, 1),
+			3 => storage.pan_law = min((value * 3.0) as u8, 2),
 			_ => {
 				// release lock before panicking!
 				drop(storage);
@@ -220,14 +220,14 @@ impl PluginParameters for FaderEffectParameters {
 				)
 			}
 			2 => {
-				let index = (self.storage.read().unwrap().pan_taper * 2.0) as i32;
+				let index = self.storage.read().unwrap().pan_taper;
 				match index {
 					0 => "Sine".to_string(),
 					_ => "Root".to_string(),
 				}
 			}
 			3 => {
-				let index = (self.storage.read().unwrap().pan_law * 3.0) as i32;
+				let index = self.storage.read().unwrap().pan_law;
 				match index {
 					0 => "3 dB".to_string(),
 					1 => "4.5 dB".to_string(),
