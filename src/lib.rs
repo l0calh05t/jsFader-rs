@@ -31,33 +31,24 @@ impl FaderEffect {
 	) {
 		let target_volume = self.parameters.volume.get();
 		let target_pan = self.parameters.pan.get();
-		let pan_taper = {
-			let index = (self.parameters.pan_taper.get() * 2.0) as i32;
-			match index {
-				0 => &PAN_LUT[0],
-				_ => &PAN_LUT[1],
-			}
-		};
-		let pan_law = {
-			let index = (self.parameters.pan_law.get() * 3.0) as i32;
-			match index {
-				0 => &pan_taper[0],
-				1 => &pan_taper[1],
-				_ => &pan_taper[2],
-			}
-		};
+		let pan_taper =
+			&PAN_LUT[std::cmp::min((self.parameters.pan_taper.get() * 2.0) as usize, 1)];
+		let pan_law = &pan_taper[std::cmp::min((self.parameters.pan_law.get() * 3.0) as usize, 2)];
+		let volume_lut = &*VOLUME_LUT;
 
 		let mut volume = if self.current_volume < 0.0 {
 			target_volume
 		} else {
 			self.current_volume
 		};
+		self.current_volume = target_volume;
 
 		let mut pan = if self.current_pan < 0.0 {
 			target_pan
 		} else {
 			self.current_pan
 		};
+		self.current_pan = target_pan;
 
 		let num_samples = buffer.samples();
 		let (inputs, outputs) = buffer.split();
@@ -66,14 +57,14 @@ impl FaderEffect {
 		let num_channels = std::cmp::min(num_inputs, num_outputs);
 		let channel_pairs = num_channels / 2;
 
-		let volume_delta = (target_volume - self.current_volume) / num_samples as f32;
-		let pan_delta = (target_pan - self.current_pan) / num_samples as f32;
+		let volume_delta = (target_volume - volume) / num_samples as f32;
+		let pan_delta = (target_pan - pan) / num_samples as f32;
 
 		for sample_idx in 0..num_samples {
 			volume = (volume + volume_delta).max(0.0).min(1.0);
 			pan = (pan + pan_delta).max(0.0).min(1.0);
 
-			let volume_gain: F = lookup_interpolated(&*VOLUME_LUT, volume).into();
+			let volume_gain: F = lookup_interpolated(volume_lut, volume).into();
 			let gain_left = volume_gain * lookup_interpolated(pan_law, pan).into();
 			let gain_right = volume_gain * lookup_interpolated(pan_law, 1.0 - pan).into();
 
@@ -99,9 +90,6 @@ impl FaderEffect {
 				outputs.get_mut(index)[sample_idx] = F::zero();
 			}
 		}
-
-		self.current_volume = target_volume;
-		self.current_pan = target_pan;
 	}
 }
 
@@ -170,8 +158,12 @@ impl PluginParameters for FaderEffectParameters {
 		match index {
 			0 => self.volume.set(value),
 			1 => self.pan.set(value),
-			2 => self.pan_taper.set(value),
-			3 => self.pan_law.set(value),
+			2 => self
+				.pan_taper
+				.set(((value * 2.0) as i32 as f32).max(0.0).min(1.0)),
+			3 => self
+				.pan_law
+				.set(((value * 3.0) as i32 as f32 / 2.0).max(0.0).min(1.0)),
 			_ => panic!("invalid parameter index!"),
 		}
 	}
