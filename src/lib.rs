@@ -30,6 +30,8 @@ struct FaderEffect {
 
 impl Default for FaderEffect {
 	fn default() -> FaderEffect {
+		lazy_static::initialize(&VOLUME_LUT);
+		lazy_static::initialize(&PAN_LUT);
 		FaderEffect {
 			parameters: Arc::new(FaderEffectParameters::default()),
 			current_volume: -1.0, // these should really be reset to -1.0 whenever processing is interrupted or transport is moved etc.
