@@ -2,6 +2,7 @@
 name = "jsfader-rs"
 version = "0.1.0"
 authors = ["l0calh05t <l0calh05t@gmx.net>"]
+license = "Apache 2.0"
 edition = "2018"
 
 [lib]
