@@ -1,11 +1,11 @@
 // Copyright 2019 J. S. Mueller-Roemer
-
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-
+//
 //    http://www.apache.org/licenses/LICENSE-2.0
-
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,6 +23,7 @@ use std::f32::consts::PI;
 use std::sync::{Arc, RwLock};
 
 use vst::buffer::AudioBuffer;
+use vst::editor::Editor;
 use vst::plugin::{Category, Info, Plugin, PluginParameters};
 use vst::plugin_main;
 
@@ -136,6 +137,10 @@ impl Plugin for FaderEffect {
 
 	fn get_parameter_object(&mut self) -> Arc<dyn PluginParameters> {
 		Arc::clone(&self.parameters) as Arc<dyn PluginParameters>
+	}
+
+	fn get_editor(&mut self) -> Option<Box<dyn Editor>> {
+		Some(Box::new(FaderEffectEditor { window: None }))
 	}
 }
 
@@ -315,5 +320,53 @@ fn non_finite_to_zero<F: Float>(value: F) -> F {
 		value
 	} else {
 		F::zero()
+	}
+}
+
+use std::os::raw::c_void;
+
+use winit::event_loop::EventLoop;
+use winit::platform::windows::{EventLoopExtWindows, WindowBuilderExtWindows};
+use winit::window::{Window, WindowBuilder};
+
+thread_local! {
+	static EVENT_LOOP: EventLoop<i32> = {
+		EventLoop::new_dpi_unaware()
+	};
+}
+
+struct FaderEffectEditor {
+	window: Option<Window>,
+}
+
+impl Editor for FaderEffectEditor {
+	fn size(&self) -> (i32, i32) {
+		(128, 128)
+	}
+
+	fn position(&self) -> (i32, i32) {
+		(0, 0)
+	}
+
+	fn open(&mut self, parent: *mut c_void) -> bool {
+		if self.window.is_some() {
+			return false;
+		}
+		self.window = Some(EVENT_LOOP.with(|event_loop| {
+			WindowBuilder::new()
+				.with_parent_window(parent as winapi::shared::windef::HWND)
+				.with_inner_size(winit::dpi::LogicalSize::new(128.0, 128.0))
+				.build(event_loop)
+				.unwrap()
+		}));
+		false
+	}
+
+	fn is_open(&mut self) -> bool {
+		self.window.is_some()
+	}
+
+	fn close(&mut self) {
+		self.window = None
 	}
 }
