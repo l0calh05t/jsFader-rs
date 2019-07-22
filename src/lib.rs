@@ -360,7 +360,7 @@ impl Editor for FaderEffectEditor {
 				.build(event_loop)
 				.unwrap()
 		}));
-		false
+		true
 	}
 
 	fn is_open(&mut self) -> bool {
