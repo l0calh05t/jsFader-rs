@@ -356,6 +356,7 @@ impl Editor for FaderEffectEditor {
 			WindowBuilder::new()
 				.with_parent_window(parent as winapi::shared::windef::HWND)
 				.with_inner_size(winit::dpi::LogicalSize::new(128.0, 128.0))
+				.with_decorations(false)
 				.build(event_loop)
 				.unwrap()
 		}));
