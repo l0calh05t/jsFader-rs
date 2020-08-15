@@ -1,16 +1,16 @@
 [package]
-name = "jsfader-rs"
-version = "0.1.0"
-authors = ["l0calh05t <l0calh05t@gmx.net>"]
-license = "Apache-2.0"
-edition = "2018"
+name = 'jsfader-rs'
+version = '0.1.0'
+authors = ['l0calh05t <l0calh05t@gmx.net>']
+license = 'Apache-2.0'
+edition = '2018'
 
 [lib]
-name = "jsFaderRust"
-crate-type = ["cdylib"]
+name = 'jsFaderRust'
+crate-type = ['cdylib']
 
 [dependencies]
-itertools-num = "0.1.3"
-lazy_static = "1.3.0"
-num-traits = "0.2.8"
-vst = { git = "https://github.com/rustaudio/vst-rs", rev = "269adb67d3708121613e655726c9ab9eb582385e" }
+itertools-num = '0.1.3'
+lazy_static = '1.4.0'
+num-traits = '0.2.12'
+vst = '0.2.0'

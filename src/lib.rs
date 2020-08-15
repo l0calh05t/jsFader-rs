@@ -67,7 +67,7 @@ impl FaderEffect {
 		self.current_pan = target_pan;
 
 		let num_samples = buffer.samples();
-		let (inputs, outputs) = buffer.split();
+		let (inputs, mut outputs) = buffer.split();
 		let num_inputs = inputs.len();
 		let num_outputs = outputs.len();
 		let num_channels = min(num_inputs, num_outputs);
@@ -213,12 +213,10 @@ impl PluginParameters for FaderEffectParameters {
 				format!(
 					"{} {}",
 					pan.abs(),
-					if pan < 0 {
-						"L"
-					} else if pan > 0 {
-						"R"
-					} else {
-						"C"
+					match pan {
+						std::i32::MIN..=-1 => 'L',
+						0 => 'C',
+						1..=std::i32::MAX => 'R',
 					}
 				)
 			}
